@@ -3,6 +3,7 @@ from time import sleep
 from threading import Timer
 import configparser
 import os.path
+import logger
 
 
 class PhotoBox:
@@ -24,6 +25,7 @@ class PhotoBox:
   
   
   def __init__(self):
+    logging.debug("Initializing PhotoBox")
     self.config = configparser.ConfigParser()
     if os.path.isfile("photobox.ini"):
       self.config.read("photobox.ini")
@@ -57,6 +59,7 @@ class PhotoBox:
 
 
   def _dtb(self):
+    logging.debug("_dtb: Disabling all Timers and Button activities")
     # Disable Timers and Buttons
     self.standby_timer.cancel()
     self.review_timer.cancel()
@@ -66,6 +69,7 @@ class PhotoBox:
 
 
   def _switch_lights(self, to = False):
+    logging.debug("_switch_lights: Switching Lights state")
     if to is None: # toggle 
       self.switch_light_A.value = not self.switch_light_A.value
       self.switch_light_B.value = not self.switch_light_B.value
@@ -78,6 +82,7 @@ class PhotoBox:
 
 
   def _fbi(self, file = None, folder = None, delay=15, random = 0):
+    logging.debug("_fbi: Displaying image")
     # remove all old images
     os.system("killall fbi");
     
@@ -97,6 +102,7 @@ class PhotoBox:
 
 
   def _take_photo(self, delay = None):
+    logging.debug("_take_photo")
     self._dtb() # disable Timer and Buttons
     
     if not delay is None:
@@ -113,10 +119,12 @@ class PhotoBox:
 
 
   def _take_photo_delayed(self):
+    logging.debug("_take_photo_delayed")
     return _take_photo(5)
 
   
   def _delete_photo(self):
+    logging.debug("_delete_photo")
     self._dtb() # disable Timer and Buttons
     
     # Sorry, never delete anything :)  
@@ -134,6 +142,7 @@ class PhotoBox:
 
     
   def standby(self):
+    logging.debug("standby")
     self._dtb() # disable Timer and Buttons
 
     # Turn off Lights
@@ -147,6 +156,7 @@ class PhotoBox:
     self.button_delayed.when_pressed = self.active
   
   def active(self):
+    logging.debug("active")
     self._dtb() # disable Timer and Buttons
     
     # Turn on Lights
@@ -164,6 +174,7 @@ class PhotoBox:
     
 
   def review(self):
+    logging.debug("review")
     self._dtb() # disable Timer and Buttons
 
     # Keep lights are they were
@@ -181,6 +192,7 @@ class PhotoBox:
     
   
   def maintenance(self):
+    logging.debug("maintenance")
     self._dtb() # disable Timer and Buttons
 
     # Turn off lights
