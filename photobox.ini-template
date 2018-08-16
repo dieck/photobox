@@ -1,0 +1,25 @@
+# Config file for Photobox
+
+# GPIO Port configurations
+[GPIO]
+button_instant = 1
+button_delayed = 2
+switch_light_A = 3
+switch_light_B = 4
+
+
+[PATHS]
+# Image storage 
+storage = "/tmp"
+
+# Optional Backup storage (will copy every file)
+; backup = "/mnt"
+
+
+[TIMES]
+
+# Time settings
+standby = 5 # minutes until box goes to standby
+
+review = 15 # showing the last picture
+

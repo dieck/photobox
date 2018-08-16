@@ -1,36 +1,16 @@
 from gpiozero import Button, DigitalOutputDevice
 from time import sleep
 from threading import Timer
+import configparser
+import os.path
 
 class PhotoBox:
   """My PhotoBox"""
   
   # Configuration
-  
-  # GPIO ports
-  gpio_port_button_instant = 1
-  gpio_port_button_delayed = 2
-  gpio_port_switch_light_A = 3
-  gpio_port_switch_light_B = 4
+  config
 
-  # Image storage 
-  storage = "/tmp"
-  # backup = "/mnt" # optional backup storage
-
-  # Time settings
-  standby = 5 # minutes
-  review = 15 # seconds
-
-
-  # constants
-  STANDBY=0
-  ACTIVE=1
-  REVIEW=2
-  MAINTENANCE=4
-
-  
   # class variables
-  state = None
   button_instant = None
   button_delayed = None
   switch_light_A = None
@@ -42,17 +22,22 @@ class PhotoBox:
 
   
   def __init__(self):
-    self.button_instant = Button(gpio_port_button_instant, hold_time=3)
-    self.button_delayed = Button(gpio_port_button_delayed)
-    self.switch_light_A = DigitalOutputDevice(gpio_port_switch_light_A, active_high=False)
-    self.switch_light_B = DigitalOutputDevice(gpio_port_switch_light_B, active_high=False)
+    self.config = configparser.ConfigParser()
+    if os.path.isfile("photobox.ini"):
+      self.config.read("photobox.ini")
+    else:
+      raise Exception("photobox.ini not found")
+
+    self.button_instant = Button(self.config['GPIO']['button_instant'], hold_time=3)
+    self.button_delayed = Button(self.config['GPIO']['button_delayed'])
+    self.switch_light_A = DigitalOutputDevice(self.config['GPIO']['switch_light_A'], active_high=False)
+    self.switch_light_B = DigitalOutputDevice(self.config['GPIO']['switch_light_B'], active_high=False)
 
     # Prepare Standby Timer
-    standby_timer = Timer(standby * 60.0, self.standby)
+    self.standby_timer = Timer(config['TIMES']['standby'] * 60.0, self.standby)
 
-    # go into Standby after init    
-    self.state=PhotoBox.STANDBY
-    self.standby()
+    # go into Active after init    
+    self.active
 
 
   def _dtb(self):
@@ -129,7 +114,6 @@ class PhotoBox:
     
   def standby(self):
     self._dtb() # disable Timer and Buttons
-    self.state=PhotoBox.STANDBY
 
     # Turn off Lights
     self._switch_lights(False)
@@ -143,7 +127,6 @@ class PhotoBox:
   
   def active(self):
     self._dtb() # disable Timer and Buttons
-    self.state=PhotoBox.ACTIVE
     
     # Turn on Lights
     self._switch_lights(True)
@@ -164,7 +147,7 @@ class PhotoBox:
 
   def review(self):
     self._dtb() # disable Timer and Buttons
-    self.state=PhotoBox.REVIEW
+
     # Keep lights are they were
     # Show picture
     self._fbi(file=self.last_picture)
@@ -179,7 +162,6 @@ class PhotoBox:
   
   def maintenance(self):
     self._dtb() # disable Timer and Buttons
-    self.state=PhotoBox.MAINTENANCE
 
     # Turn off lights
     self._switch_lights(False)
@@ -189,7 +171,7 @@ class PhotoBox:
     
     # On DUAL keypress, output error information
     while 1:
-      if button_instant.is_pressed && button_delayed.is_pressed:
+      if button_instant.is_pressed and button_delayed.is_pressed:
         # TODO output error messages
         break
       sleep(0.5)
