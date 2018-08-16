@@ -4,11 +4,12 @@ from threading import Timer
 import configparser
 import os.path
 
+
 class PhotoBox:
   """My PhotoBox"""
   
   # Configuration
-  config
+  config = None
 
   # class variables
   button_instant = None
@@ -28,16 +29,26 @@ class PhotoBox:
     else:
       raise Exception("photobox.ini not found")
 
-    self.button_instant = Button(self.config['GPIO']['button_instant'], hold_time=3)
-    self.button_delayed = Button(self.config['GPIO']['button_delayed'])
-    self.switch_light_A = DigitalOutputDevice(self.config['GPIO']['switch_light_A'], active_high=False)
-    self.switch_light_B = DigitalOutputDevice(self.config['GPIO']['switch_light_B'], active_high=False)
+#    import pdb; pdb.set_trace()
+
+    gpio = int(self.config['GPIO']['button_instant'])
+    self.button_instant = Button(gpio, hold_time=3)
+    
+    gpio = int(self.config['GPIO']['button_delayed'])
+    self.button_delayed = Button(gpio)
+    
+    gpio = int(self.config['GPIO']['switch_light_A'])
+    self.switch_light_A = DigitalOutputDevice(gpio, active_high=False)
+    
+    gpio = int(self.config['GPIO']['switch_light_B'])
+    self.switch_light_B = DigitalOutputDevice(gpio, active_high=False)
 
     # Prepare Standby Timer
-    self.standby_timer = Timer(config['TIMES']['standby'] * 60.0, self.standby)
+    t = int(self.config['TIMES']['standby'])
+    self.standby_timer = Timer(t * 60.0, self.standby)
 
     # go into Active after init    
-    self.active
+    self.active()
 
 
   def _dtb(self):
@@ -185,3 +196,4 @@ class PhotoBox:
 
 ##TODO have a look at fblabel => https://www.gsp.com/cgi-bin/man.cgi?section=1&topic=fblabel
       
+PhotoBox()
