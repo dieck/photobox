@@ -71,13 +71,16 @@ class PhotoBox:
       self.switch_light_B.off()
 
 
-  def _fbi(self, file = "active.png", folder = None, delay=15):
+  def _fbi(self, file = "active.png", folder = None, delay=15, random = 0):
     # remove all old images
     os.system("killall fbi");
     
     # show new image
     fbi = "/usr/bin/fbi --noverbose -a -T 1"
     
+	if random:
+	  fbi += " -u "
+	  
     if folder is None:
       fbi += " " + file
     else:
@@ -91,7 +94,7 @@ class PhotoBox:
     self._dtb() # disable Timer and Buttons
     
     if not delay is None:
-      self._fbi(folder="delay",delay=1)
+      self._fbi(folder="fbi/delay",delay=1,random=0)
       sleep(delay) # TODO: time delayed display, so that it will take a photo at 0
     
     self.last_picture = "current.png" # TODO create photo name and make sure it doesn't already exist
@@ -130,7 +133,7 @@ class PhotoBox:
     self._switch_lights(False)
     
     # FBI slideshow "standby" folder
-    self._fbi(folder="standby")
+    self._fbi(folder="fbi/standby",random=1)
     
     # Wait for any key press to become active
     self.button_instant.when_pressed = self.active
@@ -143,7 +146,7 @@ class PhotoBox:
     self._switch_lights(True)
     
     # FBI main screen
-    self._fbi(file="active.png")
+    self._fbi(file="fbi/active.png")
     
     # Wait for key press to init countdown / directly snap
     self.button_instant.when_pressed = self._take_photo
@@ -178,7 +181,7 @@ class PhotoBox:
     self._switch_lights(False)
 
     # FBI slideshow "maintenance" folder
-    self._fbi(folder="standby")
+    self._fbi(folder="fbi/maintenance",random=1)
     
     # On DUAL keypress, output error information
     while 1:
