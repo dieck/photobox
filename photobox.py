@@ -20,7 +20,8 @@ class PhotoBox:
   last_picture = None
 
   standby_timer = None
-
+  review_time = None
+  
   
   def __init__(self):
     self.config = configparser.ConfigParser()
@@ -47,6 +48,10 @@ class PhotoBox:
     t = int(self.config['TIMES']['standby'])
     self.standby_timer = Timer(t * 60.0, self.standby)
 
+    t = int(self.config['TIMES']['review'])
+    self.review_timer = Timer(t, self.active)
+    
+
     # go into Active after init    
     self.active()
 
@@ -54,6 +59,7 @@ class PhotoBox:
   def _dtb(self):
     # Disable Timers and Buttons
     self.standby_timer.cancel()
+    self.review_timer.cancel()
     self.button_instant.when_held = None
     self.button_instant.when_pressed = None
     self.button_delayed.when_pressed = None
@@ -71,20 +77,20 @@ class PhotoBox:
       self.switch_light_B.off()
 
 
-  def _fbi(self, file = "active.png", folder = None, delay=15, random = 0):
+  def _fbi(self, file = None, folder = None, delay=15, random = 0):
     # remove all old images
     os.system("killall fbi");
     
     # show new image
     fbi = "/usr/bin/fbi --noverbose -a -T 1"
     
-	if random:
-	  fbi += " -u "
+    if random:
+      fbi += " -u "
 	  
     if folder is None:
-      fbi += " " + file
+      fbi += " %s " % file
     else:
-      fbi += " -t %d -u \"%s/*\"" % (delay, folder)
+      fbi += " -t %d -u %s/*" % (delay, folder)
 
     # TODO error handling   
     os.system(fbi)
@@ -103,6 +109,7 @@ class PhotoBox:
     os.system("gphoto2 -some-params %s" % self.last_picture)
     
     # TODO file handling - move to self.storage, create a copy in self.backup maybe
+    self.review()
 
 
   def _take_photo_delayed(self):
@@ -152,9 +159,6 @@ class PhotoBox:
     self.button_instant.when_pressed = self._take_photo
     self.button_delayed.when_pressed = self._take_photo_delayed
     
-    # after snapshot, go to review
-    self.review()
-    
     # after self.standby minutes without state change, go to standby
     self.standby_timer.start()
     
@@ -172,6 +176,8 @@ class PhotoBox:
     # at Delayede keypress or after 15sec, restart active
     self.button_delayed.when_pressed = self.active
 
+    # go to active after review time
+    self.review_timer.start()
     
   
   def maintenance(self):
@@ -200,3 +206,5 @@ class PhotoBox:
 ##TODO have a look at fblabel => https://www.gsp.com/cgi-bin/man.cgi?section=1&topic=fblabel
       
 PhotoBox()
+while (True):
+    1
