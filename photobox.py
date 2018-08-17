@@ -3,7 +3,10 @@ from time import sleep
 from threading import Timer
 import configparser
 import os.path
-import logger
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 class PhotoBox:
@@ -11,6 +14,9 @@ class PhotoBox:
   
   # Configuration
   config = None
+
+  FBI = "/usr/bin/fbi"
+  GPHOTO = "/usr/bin/gphoto2"
 
   # class variables
   button_instant = None
@@ -25,7 +31,7 @@ class PhotoBox:
   
   
   def __init__(self):
-    logging.debug("Initializing PhotoBox")
+    logger.debug("Initializing PhotoBox")
     self.config = configparser.ConfigParser()
     if os.path.isfile("photobox.ini"):
       self.config.read("photobox.ini")
@@ -51,25 +57,38 @@ class PhotoBox:
     self.standby_timer = Timer(t * 60.0, self.standby)
 
     t = int(self.config['TIMES']['review'])
-    self.review_timer = Timer(t, self.active)
-    
+    self.review_timer = Timer(t * 1.0, self.active)
 
     # go into Active after init    
     self.active()
 
 
   def _dtb(self):
-    logging.debug("_dtb: Disabling all Timers and Button activities")
+    logger.debug("_dtb: Disabling all Timers and Button activities")
     # Disable Timers and Buttons
+
+    logger.debug("_dtb: cancel standby")
     self.standby_timer.cancel()
+    t = int(self.config['TIMES']['standby'])
+    self.standby_timer = Timer(t * 60.0, self.standby)
+
+    logger.debug("_dtb: cancel review")
     self.review_timer.cancel()
+    t = int(self.config['TIMES']['review'])
+    self.review_timer = Timer(t * 1.0, self.active)
+
+    logger.debug("_dtb: unset instant when_held")
     self.button_instant.when_held = None
+
+    logger.debug("_dtb: unset instant when_pressed")
     self.button_instant.when_pressed = None
+
+    logger.debug("_dtb: unset delayed when_pressed")
     self.button_delayed.when_pressed = None
 
 
   def _switch_lights(self, to = False):
-    logging.debug("_switch_lights: Switching Lights state")
+    logger.debug("_switch_lights: Switching Lights state")
     if to is None: # toggle 
       self.switch_light_A.value = not self.switch_light_A.value
       self.switch_light_B.value = not self.switch_light_B.value
@@ -82,12 +101,12 @@ class PhotoBox:
 
 
   def _fbi(self, file = None, folder = None, delay=15, random = 0):
-    logging.debug("_fbi: Displaying image")
+    logger.debug("_fbi: Displaying image")
     # remove all old images
     os.system("killall fbi");
     
     # show new image
-    fbi = "/usr/bin/fbi --noverbose -a -T 1"
+    fbi = self.FBI + " --noverbose -a -T 1"
     
     if random:
       fbi += " -u "
@@ -102,29 +121,30 @@ class PhotoBox:
 
 
   def _take_photo(self, delay = None):
-    logging.debug("_take_photo")
+    logger.debug("_take_photo")
     self._dtb() # disable Timer and Buttons
     
     if not delay is None:
       self._fbi(folder="fbi/delay",delay=1,random=0)
       sleep(delay) # TODO: time delayed display, so that it will take a photo at 0
     
-    self.last_picture = "current.png" # TODO create photo name and make sure it doesn't already exist
+    self.last_picture = self.config['PATHS']['storage'] + "/current.png"
+    # TODO create photo name and make sure it doesn't already exist
     
     # TODO parameters, and error handling (e.g. look for camera first...)
-    os.system("gphoto2 -some-params %s" % self.last_picture)
+    os.system("%s --filename %s --force-overwrite --keep-raw --capture-image-and-download" % (self.GPHOTO, self.last_picture))
     
     # TODO file handling - move to self.storage, create a copy in self.backup maybe
     self.review()
 
 
   def _take_photo_delayed(self):
-    logging.debug("_take_photo_delayed")
-    return _take_photo(5)
+    logger.debug("_take_photo_delayed")
+    return self._take_photo(5)
 
   
   def _delete_photo(self):
-    logging.debug("_delete_photo")
+    logger.debug("_delete_photo")
     self._dtb() # disable Timer and Buttons
     
     # Sorry, never delete anything :)  
@@ -142,7 +162,7 @@ class PhotoBox:
 
     
   def standby(self):
-    logging.debug("standby")
+    logger.debug("standby")
     self._dtb() # disable Timer and Buttons
 
     # Turn off Lights
@@ -156,7 +176,7 @@ class PhotoBox:
     self.button_delayed.when_pressed = self.active
   
   def active(self):
-    logging.debug("active")
+    logger.debug("active")
     self._dtb() # disable Timer and Buttons
     
     # Turn on Lights
@@ -174,7 +194,7 @@ class PhotoBox:
     
 
   def review(self):
-    logging.debug("review")
+    logger.debug("review")
     self._dtb() # disable Timer and Buttons
 
     # Keep lights are they were
@@ -192,7 +212,7 @@ class PhotoBox:
     
   
   def maintenance(self):
-    logging.debug("maintenance")
+    logger.debug("maintenance")
     self._dtb() # disable Timer and Buttons
 
     # Turn off lights
@@ -219,4 +239,4 @@ class PhotoBox:
       
 PhotoBox()
 while (True):
-    1
+    sleep(2)
