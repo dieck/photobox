@@ -23,5 +23,9 @@ Software
 ========
 
 - gphoto2 is used to take photos with the Nikon camera
-- gpiozero is used to control the Buttons and LED light switches
+
+Libraries for needed for Python:
+- python-gpiozero
+  gpiozero is used to control the Buttons and LED light switches
+- python-configparser
 

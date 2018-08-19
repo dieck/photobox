@@ -3,6 +3,7 @@ from time import sleep
 from threading import Timer
 import configparser
 import os.path
+import subprocess
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -17,6 +18,7 @@ class PhotoBox:
 
   FBI = "/usr/bin/fbi"
   GPHOTO = "/usr/bin/gphoto2"
+  OMX = "/usr/bin/omxplayer"
 
   # class variables
   button_instant = None
@@ -125,8 +127,8 @@ class PhotoBox:
     self._dtb() # disable Timer and Buttons
     
     if not delay is None:
-      self._fbi(folder="fbi/delay",delay=1,random=0)
-      sleep(delay) # TODO: time delayed display, so that it will take a photo at 0
+      subprocess.Popen([self.OMX,"countdown/countdown.mp4"])
+      sleep(8) # TODO: time delayed display, so that it will take a photo at 0
     
     self.last_picture = self.config['PATHS']['storage'] + "/current.png"
     # TODO create photo name and make sure it doesn't already exist
@@ -140,7 +142,7 @@ class PhotoBox:
 
   def _take_photo_delayed(self):
     logger.debug("_take_photo_delayed")
-    return self._take_photo(5)
+    return self._take_photo(delay=1)
 
   
   def _delete_photo(self):
