@@ -138,8 +138,8 @@ class PhotoBox:
     else:
       fbi += " -t %d -u %s/*" % (delay, folder)
 
-    # TODO error handling   
     os.system(fbi)
+
 
   def _get_battery_level(self):
     logger.debug("_get_battery_level")
@@ -209,7 +209,6 @@ class PhotoBox:
 
     
     self.last_picture = self.config['PATHS']['storage'] + "/current.png"
-    # TODO create photo name and make sure it doesn't already exist
     
     call = "LANG=en %s --filename %s --force-overwrite --keep-raw --capture-image-and-download --get-config /main/status/batterylevel" % (self.GPHOTO, self.last_picture)
     logger.debug("starting: " + call)
@@ -287,11 +286,34 @@ class PhotoBox:
       sleep(3)
       return
     
-    # TODO file handling - move to self.storage, create a copy in self.backup maybe
     
     if filename:
-      1
     
+      # copy to storage dir
+      new_target = self.config['PATHS']['storage'] + "/" + filename
+      try:
+        copyfile(self.last_picture, new_target)
+      except (OSError, IOError) as e:
+        # if an error occurs, assume storage problem and move to maintenance
+        log.warn(e)
+        self._fbi(file="fbi/storage.png")
+        sleep(30)
+        self.maintenance()
+        return
+        
+      # copy to backup dir, if exists
+      if self.config['PATHS']['backup']:
+        new_target = self.config['PATHS']['backup'] + "/" + filename   
+        try:
+          copyfile(self.last_picture, new_target)
+        except (OSError, IOError) as e:
+          # if an error occurs, assume storage problem and move to maintenance
+          log.warn(e)
+          self._fbi(file="fbi/storage.png")
+          sleep(30)
+          self.maintenance()
+          return
+        
       # and review pic
       self.review()
       return
