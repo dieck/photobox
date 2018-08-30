@@ -23,7 +23,8 @@ class PhotoBox:
   # Configuration
   config = None
 
-  FBI = "/usr/bin/fbi"
+  FBI = "/usr/bin/sudo /usr/bin/fbi"
+  FBI_KILL = "/usr/bin/sudo /usr/bin/killall fbi"
   GPHOTO = "/usr/bin/gphoto2"
   OMX = "/usr/bin/omxplayer"
 
@@ -124,7 +125,7 @@ class PhotoBox:
   def _fbi(self, file = None, folder = None, delay=15, random = 0):
     logger.debug("_fbi: Displaying image")
     # remove all old images
-    os.system("killall fbi");
+    os.system(self.FBI_KILL);
     
     # show new image
     fbi = self.FBI + " --noverbose -a -T 1"
@@ -227,7 +228,7 @@ class PhotoBox:
     power = 0
     filename = ""
     focuserror = False
-    cameraerror = False
+    cameraerror = None
     
     if out:
       # analyze lines returned
@@ -250,17 +251,28 @@ class PhotoBox:
         # look for error state
         mtch = re.search('Error: No camera found',o)
         if mtch:
-          cameraerror = True
+          cameraerror = "fbi/error.png"
           logger.debug("---- Found No Camera error")
+
+        mtch = re.search('PTP Store Not Available',o)
+        if mtch:
+          cameraerror = "fbi/storage.png"
+          logger.debug("---- Found PTP (SD Card) error")
+
+        mtch = re.search('write: No space left on device',o)
+        if mtch:
+          cameraerror = "fbi/storage.png"
+          logger.debug("---- Found Storage (main) error")
 
         mtch = re.search('Out of Focus',o)
         if mtch:
           focuserror = True
           logger.debug("---- Found Focus error")
 
-
     # camera error - unrecoverable: Go to maintenance
     if cameraerror:
+      self._fbi(file=cameraerror)
+      sleep(30)
       self.maintenance()
       return
 
