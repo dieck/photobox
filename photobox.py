@@ -1,14 +1,21 @@
 from gpiozero import Button, DigitalOutputDevice
 from time import sleep
 from threading import Timer
+from shutil import copyfile
 import configparser
 import os.path
 import subprocess
+import re
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# TODO: Jumping around in modes will most certainly consume head memory
+# as they might think of returning - but actually never will, just forward to other states
+
+# Need to find a way to make this a kind of stateless machine without memory leaks
+# For now, assuming it will take more than an evening to fill up RAM on my Pi3 :)
 
 class PhotoBox:
   """My PhotoBox"""
@@ -29,7 +36,8 @@ class PhotoBox:
   last_picture = None
 
   standby_timer = None
-  review_time = None
+  review_timer = None
+  error_timer = None
   
   
   def __init__(self):
@@ -61,31 +69,42 @@ class PhotoBox:
     t = int(self.config['TIMES']['review'])
     self.review_timer = Timer(t * 1.0, self.active)
 
+    t = 5 # also change _dtb ## fixed: 5sec error screen
+    self.error_timer = Timer(t * 1.0, self.active)
+    
+
     # go into Active after init    
     self.active()
 
 
   def _dtb(self):
-    logger.debug("_dtb: Disabling all Timers and Button activities")
+    dtbdebug = False
+    
+    dtbdebug and logger.debug("_dtb: Disabling all Timers and Button activities")
     # Disable Timers and Buttons
 
-    logger.debug("_dtb: cancel standby")
+    dtbdebug and logger.debug("_dtb: cancel standby")
     self.standby_timer.cancel()
     t = int(self.config['TIMES']['standby'])
     self.standby_timer = Timer(t * 60.0, self.standby)
 
-    logger.debug("_dtb: cancel review")
+    dtbdebug and logger.debug("_dtb: cancel review")
     self.review_timer.cancel()
     t = int(self.config['TIMES']['review'])
     self.review_timer = Timer(t * 1.0, self.active)
 
-    logger.debug("_dtb: unset instant when_held")
+    dtbdebug and logger.debug("_dtb: cancel error")
+    self.error_timer.cancel()
+    t = 5 # also change __init__ ## fixed: 5sec error screen 
+    self.error_timer = Timer(t * 1.0, self.active)
+    
+    dtbdebug and logger.debug("_dtb: unset instant when_held")
     self.button_instant.when_held = None
 
-    logger.debug("_dtb: unset instant when_pressed")
+    dtbdebug and logger.debug("_dtb: unset instant when_pressed")
     self.button_instant.when_pressed = None
 
-    logger.debug("_dtb: unset delayed when_pressed")
+    dtbdebug and logger.debug("_dtb: unset delayed when_pressed")
     self.button_delayed.when_pressed = None
 
 
@@ -121,11 +140,57 @@ class PhotoBox:
     # TODO error handling   
     os.system(fbi)
 
+  def _get_battery_level(self):
+    logger.debug("_get_battery_level")
+    
+    call = "LANG=en %s --get-config /main/status/batterylevel" % self.GPHOTO
+    out = subprocess.Popen(call, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
 
-  def _take_photo(self, delay = None):
+    # analyze lines returned
+    power = 0
+    cameraerror = False
+    
+    if out:
+      # analyze lines returned
+
+      for o in out.splitlines():
+        logger.debug("LINE: %s" % o)
+
+        # look for battery current state
+        mtch = re.search('Current: (\d+)%',o)
+        if mtch:
+          power = int(mtch.group(1))
+          logger.debug("---- Found Battery level %i" % power)
+          
+        # look for error state
+        mtch = re.search('Error: No camera found',o)
+        if mtch:
+          cameraerror = True
+          logger.debug("---- Found No Camera found error")
+
+
+    # camera error - unrecoverable: Go to maintenance
+    if cameraerror:
+      self.maintenance()
+
+    # battery power low? show notice for 5 seconds
+    if power <= 15:
+      self._fbi(file="fbi/battery.png")
+      sleep(3)
+    
+    # and do whatever was planned to do next :)
+    return power
+
+ 
+  def _take_photo(self, delay = None, rnd=0):
     logger.debug("_take_photo")
     self._dtb() # disable Timer and Buttons
     
+    # tried to take a photo 3 times - something is wrong, going to maintenance mode
+    if (rnd == 3):
+      self.maintenance()
+
+    # delayed picture: show countdown video
     if not delay is None:
       subprocess.Popen([self.OMX,"countdown/countdown.mp4"])
       sleep(8) # TODO: time delayed display, so that it will take a photo at 0
@@ -133,10 +198,62 @@ class PhotoBox:
     self.last_picture = self.config['PATHS']['storage'] + "/current.png"
     # TODO create photo name and make sure it doesn't already exist
     
-    # TODO parameters, and error handling (e.g. look for camera first...)
-    os.system("%s --filename %s --force-overwrite --keep-raw --capture-image-and-download" % (self.GPHOTO, self.last_picture))
+    call = "LANG=en %s --filename %s --force-overwrite --keep-raw --capture-image-and-download --get-config /main/status/batterylevel" % (self.GPHOTO, self.last_picture)
+    logger.debug("starting: " + call)
+
+    out = subprocess.Popen(call, stdout=subprocess.PIPE, shell=True).communicate()[0]
+
+
+    # analyze lines returned
+    power = 0
+    filename = ""
+    focuserror = False
+    cameraerror = False
+    
+    if out:
+      # analyze lines returned
+
+      for o in out.splitlines():
+        logger.debug("LINE: %s" % o)
+
+        # look for filename        
+        mtch = re.search('Deleting file .*/(DSC.*\.JPG) on the camera',o)
+        if mtch:
+          filename = mtch.group(1)
+          logger.debug("---- Found filename %s" % filename)
+
+        # look for battery level
+        mtch = re.search('Current: (\d+)%',o)
+        if mtch:
+          power = int(mtch.group(1))
+          logger.debug("---- Found Battery level %i" % power)
+
+        # look for error state
+        mtch = re.search('Error: No camera found',o)
+        if mtch:
+          cameraerror = True
+          logger.debug("---- Found No Camera found error" % power)
+
+
+
+    # camera error - unrecoverable: Go to maintenance
+    if cameraerror:
+      self.maintenance()
+
+    # focus error - try again, up to 3 times
+    if focuserror:
+      self._fbi(file="fbi/error.png")
+      self._take_photo(rnd = rnd+1)
+      
+    # battery power low? show notice for 5 seconds
+    if power <= 15:
+      self._fbi(file="fbi/battery.png")
+      sleep(3)
     
     # TODO file handling - move to self.storage, create a copy in self.backup maybe
+    
+
+    # and review pic
     self.review()
 
 
@@ -181,6 +298,9 @@ class PhotoBox:
     logger.debug("active")
     self._dtb() # disable Timer and Buttons
     
+    # looks for battery level, will display warning, and go to maintenance if camera not found
+    self._get_battery_level()
+    
     # Turn on Lights
     self._switch_lights(True)
     
@@ -211,6 +331,21 @@ class PhotoBox:
 
     # go to active after review time
     self.review_timer.start()
+
+  def error(self):
+    logger.debug("error")
+    self._dtb() # disable Timer and Buttons
+
+    # Keep lights are they were
+
+    # FBI error screen
+    self._fbi(file="fbi/error.png")
+ 
+    # at Delay keypress or after 15sec, restart active
+    self.button_delayed.when_pressed = self.active
+
+    # go to active after review time
+    self.review_timer.start()
     
   
   def maintenance(self):
@@ -225,7 +360,7 @@ class PhotoBox:
     
     # On DUAL keypress, output error information
     while 1:
-      if button_instant.is_pressed and button_delayed.is_pressed:
+      if self.button_instant.is_pressed and self.button_delayed.is_pressed:
         # TODO output error messages
         break
       sleep(0.5)
