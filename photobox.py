@@ -32,7 +32,7 @@ class PhotoBox:
   button_delayed = None
   switch_light_A = None
   switch_light_B = None
-  
+
   last_picture = None
 
   standby_timer = None
@@ -196,7 +196,16 @@ class PhotoBox:
     # delayed picture: show countdown video
     if not delay is None:
       subprocess.Popen([self.OMX,"countdown/countdown.mp4"])
-      sleep(9) # TODO: time delayed display, so that it will take a photo at 0
+      sleep(5) # time delayed display, so that it will take a photo at 0
+      if self.config['LIGHTS']['flash_lights']:
+        self._switch_lights(True)
+      sleep(4)
+  
+    else:
+      # No countdown, just turn on lights
+      if self.config['LIGHTS']['flash_lights']:
+        self._switch_lights(True)
+
     
     self.last_picture = self.config['PATHS']['storage'] + "/current.png"
     # TODO create photo name and make sure it doesn't already exist
@@ -208,8 +217,11 @@ class PhotoBox:
     
     self._fbi(file="fbi/transfer.png")
     
+    # blocking, await gphoto2 finish    
     out = prc.communicate()[0]
-
+    
+    if self.config['LIGHTS']['flash_lights']:
+      self._switch_lights(False)
 
     # analyze lines returned
     power = 0
@@ -305,7 +317,8 @@ class PhotoBox:
     self._dtb() # disable Timer and Buttons
 
     # Turn off Lights
-    self._switch_lights(False)
+    if not self.config['LIGHTS']['flash_lights']:
+      self._switch_lights(False)
     
     # FBI slideshow "standby" folder
     self._fbi(folder="fbi/standby",random=1)
@@ -322,7 +335,8 @@ class PhotoBox:
     self._get_battery_level()
     
     # Turn on Lights
-    self._switch_lights(True)
+    if not self.config['LIGHTS']['flash_lights']:
+      self._switch_lights(True)
     
     # FBI main screen
     self._fbi(file="fbi/active.png")
@@ -374,7 +388,8 @@ class PhotoBox:
     self._dtb() # disable Timer and Buttons
 
     # Turn off lights
-    self._switch_lights(False)
+    if not self.config['LIGHTS']['flash_lights']:
+      self._switch_lights(False)
 
     # FBI slideshow "maintenance" folder
     self._fbi(folder="fbi/maintenance",random=1)

@@ -7,6 +7,10 @@ button_delayed = 2
 switch_light_A = 3
 switch_light_B = 4
 
+[LIGHTS]
+flash_lights = 1
+# on 1= turn lights only on when taking a picture
+# on 0= turn lights on when active
 
 [PATHS]
 # Image storage 
