@@ -172,11 +172,13 @@ class PhotoBox:
     # camera error - unrecoverable: Go to maintenance
     if cameraerror:
       self.maintenance()
+      return
 
     # battery power low? show notice for 5 seconds
     if power <= 15:
       self._fbi(file="fbi/battery.png")
       sleep(3)
+      return
     
     # and do whatever was planned to do next :)
     return power
@@ -186,14 +188,15 @@ class PhotoBox:
     logger.debug("_take_photo")
     self._dtb() # disable Timer and Buttons
     
-    # tried to take a photo 3 times - something is wrong, going to maintenance mode
+    # tried to take a photo 3 times - something is wrong, going to error mode
     if (rnd == 3):
-      self.maintenance()
+      self.error()
+      return
 
     # delayed picture: show countdown video
     if not delay is None:
       subprocess.Popen([self.OMX,"countdown/countdown.mp4"])
-      sleep(8) # TODO: time delayed display, so that it will take a photo at 0
+      sleep(9) # TODO: time delayed display, so that it will take a photo at 0
     
     self.last_picture = self.config['PATHS']['storage'] + "/current.png"
     # TODO create photo name and make sure it doesn't already exist
@@ -201,7 +204,11 @@ class PhotoBox:
     call = "LANG=en %s --filename %s --force-overwrite --keep-raw --capture-image-and-download --get-config /main/status/batterylevel" % (self.GPHOTO, self.last_picture)
     logger.debug("starting: " + call)
 
-    out = subprocess.Popen(call, stdout=subprocess.PIPE, shell=True).communicate()[0]
+    prc = subprocess.Popen(call, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True);
+    
+    self._fbi(file="fbi/transfer.png")
+    
+    out = prc.communicate()[0]
 
 
     # analyze lines returned
@@ -232,30 +239,43 @@ class PhotoBox:
         mtch = re.search('Error: No camera found',o)
         if mtch:
           cameraerror = True
-          logger.debug("---- Found No Camera found error" % power)
+          logger.debug("---- Found No Camera error")
 
+        mtch = re.search('Out of Focus',o)
+        if mtch:
+          focuserror = True
+          logger.debug("---- Found Focus error")
 
 
     # camera error - unrecoverable: Go to maintenance
     if cameraerror:
       self.maintenance()
+      return
 
     # focus error - try again, up to 3 times
     if focuserror:
-      self._fbi(file="fbi/error.png")
       self._take_photo(rnd = rnd+1)
+      return
       
     # battery power low? show notice for 5 seconds
     if power <= 15:
       self._fbi(file="fbi/battery.png")
       sleep(3)
+      return
     
     # TODO file handling - move to self.storage, create a copy in self.backup maybe
     
-
-    # and review pic
-    self.review()
-
+    if filename:
+      1
+    
+      # and review pic
+      self.review()
+      return
+   
+    else:
+      # do not show pic, go to active
+      self.error()
+      return
 
   def _take_photo_delayed(self):
     logger.debug("_take_photo_delayed")
@@ -343,9 +363,10 @@ class PhotoBox:
  
     # at Delay keypress or after 15sec, restart active
     self.button_delayed.when_pressed = self.active
+    self.button_instant.when_pressed = self.active
 
     # go to active after review time
-    self.review_timer.start()
+    self.error_timer.start()
     
   
   def maintenance(self):
