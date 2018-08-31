@@ -2,14 +2,26 @@ from gpiozero import Button, DigitalOutputDevice
 from time import sleep
 from threading import Timer
 from shutil import copyfile
+from os.path import expanduser
 import configparser
 import os.path
 import subprocess
 import re
 
+# create logging capabilities
 import logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+logFormatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+fileHandler = logging.FileHandler(expanduser("~") + "/photobox.log")
+fileHandler.setFormatter(logFormatter)
+logger.addHandler(fileHandler)
+
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(logFormatter)
+logger.addHandler(consoleHandler)
+
 
 # TODO: Jumping around in modes will most certainly consume head memory
 # as they might think of returning - but actually never will, just forward to other states
@@ -73,6 +85,13 @@ class PhotoBox:
     t = 5 # also change _dtb ## fixed: 5sec error screen
     self.error_timer = Timer(t * 1.0, self.active)
     
+
+    # set camera settings
+    os.system("%s --set-config-value capturetarget=1" % self.GPHOTO)
+
+    # setting config value does not seem to stick with all cameras. So just modifying gphoto2 settings here. Need to exist...
+    # Yes, sorry, this does expect Linux, for now. Well, as do file/dir separators later on :)
+    os.system('/bin/grep "ptp2=capturetarget=card" ~/.gphoto/settings || /bin/echo "ptp2=capturetarget=card" >>~/.gphoto/settings')    
 
     # go into Active after init    
     self.active()
@@ -161,13 +180,13 @@ class PhotoBox:
         mtch = re.search('Current: (\d+)%',o)
         if mtch:
           power = int(mtch.group(1))
-          logger.debug("---- Found Battery level %i" % power)
+          logger.info("---- Found Battery level %i" % power)
           
         # look for error state
         mtch = re.search('Error: No camera found',o)
         if mtch:
           cameraerror = True
-          logger.debug("---- Found No Camera found error")
+          logger.critical("---- Found No Camera found error")
 
 
     # camera error - unrecoverable: Go to maintenance
@@ -191,6 +210,7 @@ class PhotoBox:
     
     # tried to take a photo 3 times - something is wrong, going to error mode
     if (rnd == 3):
+      logger.warn("Encountered multiple errors, stopping at 3 retries")
       self.error()
       return
 
@@ -248,20 +268,29 @@ class PhotoBox:
           logger.debug("---- Found Battery level %i" % power)
 
         # look for error state
+        # no camera
         mtch = re.search('Error: No camera found',o)
         if mtch:
           cameraerror = "fbi/error.png"
-          logger.debug("---- Found No Camera error")
+          logger.error("---- Found No Camera error")
 
+        # sd card problems (most likely full)
         mtch = re.search('PTP Store Not Available',o)
         if mtch:
           cameraerror = "fbi/storage.png"
-          logger.debug("---- Found PTP (SD Card) error")
+          logger.error("---- Found PTP (SD Card) error")
 
+        # camera does not store to SD
+        mtch = re.search('New file is in location /capt0000.jpg on the camera',o)
+        if mtch:
+          cameraerror = "fbi/storage.png"
+          logger.error("---- Found file location error, not storing to SD card")
+        
+        # local pi storage full
         mtch = re.search('write: No space left on device',o)
         if mtch:
           cameraerror = "fbi/storage.png"
-          logger.debug("---- Found Storage (main) error")
+          logger.error("---- Found Storage (main or backup) error")
 
         mtch = re.search('Out of Focus',o)
         if mtch:
@@ -282,6 +311,7 @@ class PhotoBox:
       
     # battery power low? show notice for 5 seconds
     if power <= 15:
+      logger.warn("Low battery level: %i %" % power)
       self._fbi(file="fbi/battery.png")
       sleep(3)
       return
@@ -295,7 +325,7 @@ class PhotoBox:
         copyfile(self.last_picture, new_target)
       except (OSError, IOError) as e:
         # if an error occurs, assume storage problem and move to maintenance
-        log.warn(e)
+        logger.critical(e)
         self._fbi(file="fbi/storage.png")
         sleep(30)
         self.maintenance()
@@ -308,7 +338,7 @@ class PhotoBox:
           copyfile(self.last_picture, new_target)
         except (OSError, IOError) as e:
           # if an error occurs, assume storage problem and move to maintenance
-          log.warn(e)
+          logger.critical(e)
           self._fbi(file="fbi/storage.png")
           sleep(30)
           self.maintenance()
@@ -434,8 +464,12 @@ class PhotoBox:
         # TODO output error messages
         break
       sleep(0.5)
+
+    # output log to console 1
+    os.system(self.FBI_KILL);
+    os.system("/usr/bin/sudo /bin/cat ~pi/photobox.log >/dev/tty1")
     
-    sleep(3) # to avoid instant triggering
+    sleep(5) # to avoid instant triggering
  
     # get active on keypress
     self.button_instant.when_pressed = self.active
