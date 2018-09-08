@@ -54,7 +54,7 @@ class PhotoBox:
   
   
   def __init__(self):
-    logger.debug("Initializing PhotoBox")
+    logger.info("Initializing PhotoBox")
     self.config = configparser.ConfigParser()
     if os.path.isfile("photobox.ini"):
       self.config.read("photobox.ini")
@@ -96,6 +96,23 @@ class PhotoBox:
     # go into Active after init    
     self.active()
 
+  def _remove_state(self, state):
+    f = self.config['PATHS']['state'] + "/" + state
+    if os.path.isfile(f):
+      os.remove(f)
+
+  def _set_state(self, state):
+    if not self.config['PATHS']['state']:
+      return
+    # remove all possible files - do not care about old state
+    self._remove_state("active")
+    self._remove_state("standby")
+    self._remove_state("error")
+    self._remove_state("maintenancen")
+  
+    f = open(self.config['PATHS']['state'] + "/" + state,"w+")
+    f.write(state)
+    f.close()
 
   def _dtb(self):
     dtbdebug = False
@@ -226,6 +243,8 @@ class PhotoBox:
       # No countdown, just turn on lights
       if self.config['LIGHTS']['flash_lights']:
         self._switch_lights(True)
+        # and give it a second to be sure it's on
+        sleep(1)
 
     
     self.last_picture = self.config['PATHS']['storage'] + "/current.png"
@@ -319,6 +338,10 @@ class PhotoBox:
     
     if filename:
     
+      # review pic
+      # note: will not activate buttons
+      self.review(activateButtons = False)
+
       # copy to storage dir
       new_target = self.config['PATHS']['storage'] + "/" + filename
       try:
@@ -344,8 +367,8 @@ class PhotoBox:
           self.maintenance()
           return
         
-      # and review pic
-      self.review()
+      # activate buttons in review mode
+      self.review(buttonsOnly = True)
       return
    
     else:
@@ -379,6 +402,7 @@ class PhotoBox:
   def standby(self):
     logger.debug("standby")
     self._dtb() # disable Timer and Buttons
+    self._set_state("standby")
 
     # Turn off Lights
     if not self.config['LIGHTS']['flash_lights']:
@@ -394,6 +418,7 @@ class PhotoBox:
   def active(self):
     logger.debug("active")
     self._dtb() # disable Timer and Buttons
+    self._set_state("active")
     
     # looks for battery level, will display warning, and go to maintenance if camera not found
     self._get_battery_level()
@@ -413,26 +438,33 @@ class PhotoBox:
     self.standby_timer.start()
     
 
-  def review(self):
+  def review(self, activateButtons=True, buttonsOnly=False):
     logger.debug("review")
-    self._dtb() # disable Timer and Buttons
+    
+    if buttonsOnly == False:
+      self._dtb() # disable Timer and Buttons
 
-    # Keep lights are they were
-    # Show picture
-    self._fbi(file=self.last_picture)
+      # Keep lights are they were
+      # Show picture
+      self._fbi(file=self.last_picture)
  
-    # at "long?" Instant keypress, move Image to Deleted
-    self.button_instant.when_held = self._delete_photo
+    if buttonsOnly == True or activateButtons == True: 
+      # at "long?" Instant keypress, move Image to Deleted
+      self.button_instant.when_held = self._delete_photo
  
-    # at Delayede keypress or after 15sec, restart active
-    self.button_delayed.when_pressed = self.active
+      # at Delayede keypress or after 15sec, restart active
+      self.button_delayed.when_pressed = self.active
+      self.button_instant.when_pressed = self.active
 
-    # go to active after review time
-    self.review_timer.start()
+    if buttonsOnly == False:
+      # go to active after review time
+      self.review_timer.start()
+
 
   def error(self):
     logger.debug("error")
     self._dtb() # disable Timer and Buttons
+    self._set_state("error")
 
     # Keep lights are they were
 
@@ -450,6 +482,7 @@ class PhotoBox:
   def maintenance(self):
     logger.debug("maintenance")
     self._dtb() # disable Timer and Buttons
+    self._set_state("maintenance")
 
     # Turn off lights
     if not self.config['LIGHTS']['flash_lights']:
