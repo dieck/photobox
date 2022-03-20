@@ -73,7 +73,7 @@ class PhotoBox:
 
     gpio = int(self.config['GPIO']['button_shutdown'])
     self.button_shutdown = Button(gpio)
-	self.button_shutdown.when_pressed = self.shutdownRaspi
+    self.button_shutdown.when_pressed = self.shutdownRaspi
 	
     gpio = int(self.config['GPIO']['switch_light_A'])
     self.switch_light_A = DigitalOutputDevice(gpio, active_high=False)
@@ -103,19 +103,20 @@ class PhotoBox:
     self.active()
 
   def shutdownRaspi(self):
-	self._switch_lights(to = True)
-	sleep(2)
-	self._switch_lights(to = False)
-	sleep(2)
-	self._switch_lights(to = True)
-	sleep(2)
-	self._switch_lights(to = False)
-	sleep(2)
-	self._switch_lights(to = True)
-	sleep(2)
-	self._switch_lights(to = False)
-	sleep(2)
-	os.system("sudo shutdown -h now")´
+    self._switch_lights(to = True)
+    sleep(2)
+    self._switch_lights(to = False)
+    sleep(2)
+    self._switch_lights(to = True)
+    sleep(2)
+    self._switch_lights(to = False)
+    sleep(2)
+    self._switch_lights(to = True)
+    sleep(2)
+    self._switch_lights(to = False)
+    sleep(2)
+    os.system("sudo shutdown -r now")
+
 
   def _remove_state(self, state):
     f = self.config['PATHS']['state'] + "/" + state
