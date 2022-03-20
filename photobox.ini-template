@@ -2,10 +2,11 @@
 
 # GPIO Port configurations
 [GPIO]
-button_instant = 1
-button_delayed = 2
-switch_light_A = 3
-switch_light_B = 4
+button_instant = 16
+button_delayed = 13
+button_shutdown = 25
+switch_light_A = 2
+switch_light_B = 3
 
 [LIGHTS]
 flash_lights = 1
@@ -13,11 +14,19 @@ flash_lights = 1
 # on 0= turn lights on when active
 
 [PATHS]
+
 # Image storage 
-storage = "/tmp"
+storage = /home/pi/photos
+
+# directory where a file "active", "standby", "error" or "maintenance" will be created
+state = /home/pi/photobox.state
 
 # Optional Backup storage (will copy every file)
-; backup = "/mnt"
+; backup = /mnt
+
+# Directory for Web image
+# needs to be writeable by user pi and readable by all
+; lastweb = /var/www/html/last
 
 
 [TIMES]

@@ -70,7 +70,11 @@ class PhotoBox:
     
     gpio = int(self.config['GPIO']['button_delayed'])
     self.button_delayed = Button(gpio)
-    
+
+    gpio = int(self.config['GPIO']['button_shutdown'])
+    self.button_shutdown = Button(gpio)
+	self.button_shutdown.when_pressed = self.shutdownRaspi
+	
     gpio = int(self.config['GPIO']['switch_light_A'])
     self.switch_light_A = DigitalOutputDevice(gpio, active_high=False)
     
@@ -98,6 +102,21 @@ class PhotoBox:
     # go into Active after init    
     self.active()
 
+  def shutdownRaspi(self):
+	self._switch_lights(to = True)
+	sleep(2)
+	self._switch_lights(to = False)
+	sleep(2)
+	self._switch_lights(to = True)
+	sleep(2)
+	self._switch_lights(to = False)
+	sleep(2)
+	self._switch_lights(to = True)
+	sleep(2)
+	self._switch_lights(to = False)
+	sleep(2)
+	os.system("sudo shutdown -h now")´
+
   def _remove_state(self, state):
     f = self.config['PATHS']['state'] + "/" + state
     if os.path.isfile(f):
@@ -116,6 +135,7 @@ class PhotoBox:
     f.write(state)
     f.close()
 
+  ## disable timers and buttons
   def _dtb(self):
     dtbdebug = False
     
