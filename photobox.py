@@ -3,10 +3,12 @@ from time import sleep
 from threading import Timer
 from shutil import copyfile
 from os.path import expanduser
+from os import remove
 import configparser
 import os.path
 import subprocess
 import re
+import uuid
 
 # create logging capabilities
 import logging
@@ -108,7 +110,7 @@ class PhotoBox:
     self._remove_state("active")
     self._remove_state("standby")
     self._remove_state("error")
-    self._remove_state("maintenancen")
+    self._remove_state("maintenance")
   
     f = open(self.config['PATHS']['state'] + "/" + state,"w+")
     f.write(state)
@@ -228,24 +230,28 @@ class PhotoBox:
     # tried to take a photo 3 times - something is wrong, going to error mode
     if (rnd == 3):
       logger.warn("Encountered multiple errors, stopping at 3 retries")
-      self.error()
+      self.error(file="fbi/error-retry.png")
       return
 
     # delayed picture: show countdown video
-    if not delay is None:
-      subprocess.Popen([self.OMX,"countdown/countdown.mp4"])
-      sleep(5) # time delayed display, so that it will take a photo at 0
-      if self.config['LIGHTS']['flash_lights']:
-        self._switch_lights(True)
-      sleep(4)
-  
-    else:
+    if delay is None:
       # No countdown, just turn on lights
       if self.config['LIGHTS']['flash_lights']:
         self._switch_lights(True)
         # and give it a second to be sure it's on
         sleep(1)
-
+    elif delay == 3:
+      if self.config['LIGHTS']['flash_lights']:
+        self._switch_lights(True)
+      subprocess.Popen([self.OMX,"countdown/countdown3.mp4"])
+      sleep(3)
+    else:  
+      subprocess.Popen([self.OMX,"countdown/countdown.mp4"])
+      sleep(5) # time delayed display, so that it will take a photo at 0
+      if self.config['LIGHTS']['flash_lights']:
+        self._switch_lights(True)
+      sleep(4)
+ 
     
     self.last_picture = self.config['PATHS']['storage'] + "/current.png"
     
@@ -280,6 +286,12 @@ class PhotoBox:
           filename = mtch.group(1)
           logger.debug("---- Found filename %s" % filename)
 
+       # look if camera is set to RAW
+        mtch = re.search('Keeping file .*/(DSC.*\.NEF) on the camera',o)
+        if mtch:
+          logger.error("---- Camera uses RAW/NEF")
+          cameraerror = "fbi/error-raw.png"
+
         # look for battery level
         mtch = re.search('Current: (\d+)%',o)
         if mtch:
@@ -290,25 +302,25 @@ class PhotoBox:
         # no camera
         mtch = re.search('Error: No camera found',o)
         if mtch:
-          cameraerror = "fbi/error.png"
+          cameraerror = "fbi/error-nocam.png"
           logger.error("---- Found No Camera error")
 
         # sd card problems (most likely full)
         mtch = re.search('PTP Store Not Available',o)
         if mtch:
-          cameraerror = "fbi/storage.png"
+          cameraerror = "fbi/storage-ptp.png"
           logger.error("---- Found PTP (SD Card) error")
 
         # camera does not store to SD
         mtch = re.search('New file is in location /capt0000.jpg on the camera',o)
         if mtch:
-          cameraerror = "fbi/storage.png"
+          cameraerror = "fbi/storage-sd.png"
           logger.error("---- Found file location error, not storing to SD card")
         
         # local pi storage full
         mtch = re.search('write: No space left on device',o)
         if mtch:
-          cameraerror = "fbi/storage.png"
+          cameraerror = "fbi/storage-pi.png"
           logger.error("---- Found Storage (main or backup) error")
 
         mtch = re.search('Out of Focus',o)
@@ -342,29 +354,49 @@ class PhotoBox:
       # note: will not activate buttons
       self.review(activateButtons = False)
 
+      splfile = filename.split('.')
+      splfile.insert(len(splfile)-1, str(uuid.uuid4()))
+      filenameuuid = '.'.join(splfile)
+
       # copy to storage dir
-      new_target = self.config['PATHS']['storage'] + "/" + filename
+      new_target = self.config['PATHS']['storage'] + "/" + filenameuuid
       try:
         copyfile(self.last_picture, new_target)
       except (OSError, IOError) as e:
         # if an error occurs, assume storage problem and move to maintenance
         logger.critical(e)
-        self._fbi(file="fbi/storage.png")
+        self._fbi(file="fbi/storage-file.png")
         sleep(30)
         self.maintenance()
         return
         
       # copy to backup dir, if exists
       if self.config['PATHS']['backup']:
-        new_target = self.config['PATHS']['backup'] + "/" + filename   
+        new_target = self.config['PATHS']['backup'] + "/" + filenameuuid   
         try:
           copyfile(self.last_picture, new_target)
         except (OSError, IOError) as e:
           # if an error occurs, assume storage problem and move to maintenance
           logger.critical(e)
-          self._fbi(file="fbi/storage.png")
+          self._fbi(file="fbi/storage-backup.png")
           sleep(30)
           self.maintenance()
+          return
+        
+      # copy to web last dir, if exists
+      if self.config['PATHS']['lastweb']:
+        new_target = self.config['PATHS']['lastweb'] + "/" + filenameuuid   
+        try:
+          copyfile(self.last_picture, new_target)
+          # Create HTML file
+          lw = open(self.config['PATHS']['lastweb'] + "/index.html","w+")
+          lw.write('<html><body><img width="640" src="%s" /></body></html>' % filenameuuid)
+          lw.close()
+          
+        except (OSError, IOError) as e:
+          # if an error occurs, ignore.
+          logger.critical(e)
+          logger.critical("ignored for web")
           return
         
       # activate buttons in review mode
@@ -372,13 +404,18 @@ class PhotoBox:
       return
    
     else:
-      # do not show pic, go to active
-      self.error()
+      # no filename found - most likely not downloaded from camera?
+      logger.error("no filename found in camera output")
+      self.error(file="fbi/error-file.png")
       return
 
   def _take_photo_delayed(self):
     logger.debug("_take_photo_delayed")
     return self._take_photo(delay=1)
+
+  def _take_photo_delayedshort(self):
+    logger.debug("_take_photo_delayedshort")
+    return self._take_photo(delay=3)
 
   
   def _delete_photo(self):
@@ -431,7 +468,7 @@ class PhotoBox:
     self._fbi(file="fbi/active.png")
     
     # Wait for key press to init countdown / directly snap
-    self.button_instant.when_pressed = self._take_photo
+    self.button_instant.when_pressed = self._take_photo_delayedshort
     self.button_delayed.when_pressed = self._take_photo_delayed
     
     # after self.standby minutes without state change, go to standby
